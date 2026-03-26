@@ -73,6 +73,17 @@
             margin-bottom: 24px;
         }
 
+        .badge {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--bg-primary);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
         .section {
             margin-bottom: 32px;
         }
@@ -146,6 +157,40 @@
             border-color: var(--text-primary);
         }
 
+        .device-info {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .device-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .device-badge.active {
+            border-color: var(--accent);
+            font-weight: 500;
+        }
+
+        .device-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+
+        .device-badge.active .device-dot {
+            background: #22c55e;
+        }
+
         .files-list {
             border: 1px solid var(--border-color);
             border-radius: 6px;
@@ -191,6 +236,22 @@
             margin-left: 10px;
             font-size: 12px;
             color: var(--text-secondary);
+        }
+
+        .file-progress {
+            width: 60px;
+            height: 4px;
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-left: 10px;
+        }
+
+        .file-progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.3s;
         }
 
         .button-group {
@@ -291,6 +352,35 @@
             transition: width 0.3s ease;
         }
 
+        .downloads-list {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .download-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .download-item:last-child {
+            border-bottom: none;
+        }
+
+        .download-name {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .download-size {
+            font-variant-numeric: tabular-nums;
+        }
+
         .results-container {
             display: none;
         }
@@ -376,6 +466,33 @@
             font-weight: 500;
         }
 
+        .perf-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .perf-stat {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .perf-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .perf-stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
         @media (max-width: 640px) {
             .container {
                 padding: 16px;
@@ -407,22 +524,40 @@
             .result-btn {
                 flex: 1;
             }
+
+            .device-info {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Transcritor</h1>
+        <h1>Transcritor <span class="badge">WebGPU</span></h1>
         <p class="subtitle">Transcreva áudio localmente no seu navegador</p>
+
+        <div class="section">
+            <div class="section-title">Dispositivo</div>
+            <div class="device-info">
+                <div class="device-badge" id="badgeWasm">
+                    <span class="device-dot"></span>
+                    <span>WASM (CPU)</span>
+                </div>
+                <div class="device-badge" id="badgeWebgpu">
+                    <span class="device-dot"></span>
+                    <span>WebGPU (GPU)</span>
+                </div>
+            </div>
+        </div>
 
         <div class="section">
             <div class="section-title">Modelo</div>
             <div class="model-selector">
                 <label for="modelSelect">Selecione:</label>
                 <select id="modelSelect">
-                    <option value="tiny">Tiny (40MB - Mais rápido)</option>
-                    <option value="base" selected>Base (75MB - Equilibrado)</option>
-                    <option value="small">Small (140MB - Mais preciso)</option>
+                    <option value="onnx-community/whisper-tiny">Tiny (39MB - Mais rápido)</option>
+                    <option value="onnx-community/whisper-base" selected>Base (74MB - Equilibrado)</option>
+                    <option value="onnx-community/whisper-small">Small (241MB - Mais preciso)</option>
                 </select>
             </div>
         </div>
@@ -442,12 +577,13 @@
 
         <div class="progress-container" id="progressContainer">
             <div class="progress-label">
-                <span id="progressLabel">Processando</span>
+                <span id="progressLabel">Inicializando</span>
                 <span id="progressPercent">0%</span>
             </div>
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
+            <div class="downloads-list" id="downloadsList"></div>
         </div>
 
         <div class="button-group">
@@ -463,11 +599,14 @@
     </div>
 
     <script type="module">
-        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0';
-
+        let worker = null;
         let selectedFiles = [];
         let results = {};
-        let transcriber = null;
+        let isReady = false;
+        let currentDevice = 'wasm';
+        let timings = {};
+        let workers = [];
+        let isTranscribing = false;
 
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -480,12 +619,101 @@
         const progressFill = document.getElementById('progressFill');
         const progressPercent = document.getElementById('progressPercent');
         const progressLabel = document.getElementById('progressLabel');
+        const downloadsList = document.getElementById('downloadsList');
         const modelSelect = document.getElementById('modelSelect');
         const resultsContainer = document.getElementById('resultsContainer');
         const resultsList = document.getElementById('resultsList');
         const statsDiv = document.getElementById('stats');
+        const badgeWasm = document.getElementById('badgeWasm');
+        const badgeWebgpu = document.getElementById('badgeWebgpu');
 
-        uploadArea.addEventListener('click', () => fileInput.click());
+        function detectDevice() {
+            if (navigator.gpu) {
+                currentDevice = 'webgpu';
+                badgeWebgpu.classList.add('active');
+                badgeWasm.classList.remove('active');
+            } else {
+                currentDevice = 'wasm';
+                badgeWasm.classList.add('active');
+                badgeWebgpu.classList.remove('active');
+            }
+        }
+
+        function handleWorkerMessage(e) {
+            const { type, progress, message, error, filename, text, chunks, downloads } = e.data;
+
+            switch (type) {
+                case 'status':
+                    showStatus(message);
+                    break;
+
+                case 'progress':
+                    updateProgress(progress);
+                    break;
+
+                case 'downloads':
+                    renderDownloads(downloads);
+                    break;
+
+                case 'ready':
+                    isReady = true;
+                    showStatus('Pronto');
+                    progressContainer.classList.remove('active');
+                    downloadsList.innerHTML = '';
+                    transcribeBtn.disabled = false;
+                    break;
+
+                case 'result':
+                    results[filename] = { text, chunks, timing: Date.now() - (timings[filename] || Date.now()) };
+                    updateFileStatus(filename, 'done');
+                    checkComplete();
+                    break;
+
+                case 'error':
+                    results[filename || 'unknown'] = { text: `Erro: ${error}`, chunks: null, timing: 0 };
+                    updateFileStatus(filename || 'unknown', 'error');
+                    checkComplete();
+                    break;
+            }
+        }
+
+        function initWorker() {
+            worker = new Worker('./worker.js', { type: 'module' });
+            worker.onmessage = handleWorkerMessage;
+
+            worker.onerror = function(e) {
+                showStatus(`Erro: ${e.message}`);
+                progressContainer.classList.remove('active');
+                transcribeBtn.disabled = false;
+            };
+        }
+
+        function loadModel() {
+            isReady = false;
+            transcribeBtn.disabled = true;
+            progressContainer.classList.add('active');
+            updateProgress(0);
+            progressLabel.textContent = 'Baixando modelo...';
+
+            worker.postMessage({
+                type: 'init',
+                data: {
+                    model: modelSelect.value,
+                    device: currentDevice
+                }
+            });
+        }
+
+        modelSelect.addEventListener('change', () => {
+            if (isReady) {
+                loadModel();
+            }
+        });
+
+        uploadArea.addEventListener('click', function() {
+            console.log('uploadArea clicked', fileInput);
+            fileInput.click();
+        });
 
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -516,7 +744,7 @@
 
             selectedFiles = audioFiles;
             renderFilesList();
-            transcribeBtn.disabled = false;
+            transcribeBtn.disabled = !isReady;
             clearStatus();
         }
 
@@ -525,22 +753,46 @@
             selectedFiles.forEach((file) => {
                 const item = document.createElement('div');
                 item.className = 'file-item';
-                const isDone = results[file.name];
-                const statusText = isDone ? '✓' : '○';
+                item.id = `file-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const existingResult = results[file.name];
+                let statusHtml = '○';
+                
+                if (existingResult) {
+                    statusHtml = existingResult.text.startsWith('Erro:') ? '✗' : '✓';
+                }
+
                 item.innerHTML = `
                     <div class="file-item-info">
                         <div class="file-item-name">${file.name}</div>
                         <div class="file-item-size">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
                     </div>
-                    <div class="file-item-status">${statusText}</div>
+                    <div class="file-item-status" id="status-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}">${statusHtml}</div>
+                    <div class="file-progress">
+                        <div class="file-progress-fill" id="progress-${file.name.replace(/[^a-zA-Z0-9]/g, '_')}"></div>
+                    </div>
                 `;
                 filesList.appendChild(item);
             });
             filesList.classList.add('active');
         }
 
+        function updateFileStatus(filename, status) {
+            const safeName = filename.replace(/[^a-zA-Z0-9]/g, '_');
+            const statusEl = document.getElementById(`status-${safeName}`);
+            const progressEl = document.getElementById(`progress-${safeName}`);
+            
+            if (statusEl) {
+                statusEl.textContent = status === 'done' ? '✓' : status === 'error' ? '✗' : '...';
+            }
+            if (progressEl) {
+                progressEl.style.width = status === 'done' ? '100%' : status === 'processing' ? '50%' : '0%';
+            }
+        }
+
         transcribeBtn.addEventListener('click', async () => {
-            if (selectedFiles.length === 0) return;
+            if (selectedFiles.length === 0 || !isReady) return;
+            if (isTranscribing) return;
+            isTranscribing = true;
 
             transcribeBtn.disabled = true;
             downloadAllBtn.disabled = true;
@@ -548,53 +800,139 @@
             resultsContainer.classList.remove('active');
             results = {};
 
-            try {
-                showStatus(`Carregando modelo ${modelSelect.value}...`);
+            workers.forEach(w => w.terminate());
+            workers = [];
 
-                if (!transcriber) {
-                    transcriber = await pipeline(
-                        'automatic-speech-recognition',
-                        `Xenova/whisper-${modelSelect.value}`,
-                        { progress_callback: updateModelProgress }
-                    );
-                }
+            const numWorkers = Math.min(navigator.hardwareConcurrency || 4, selectedFiles.length);
+            const workerReadyPromises = [];
 
-                for (let i = 0; i < selectedFiles.length; i++) {
-                    const file = selectedFiles[i];
-                    showStatus(`Processando ${i + 1}/${selectedFiles.length}: ${file.name}`);
-                    progressLabel.textContent = `Arquivo ${i + 1}/${selectedFiles.length}`;
+            for (let i = 0; i < numWorkers; i++) {
+                const w = new Worker('./worker.js', { type: 'module' });
+                w.onmessage = handleWorkerMessage;
+                workers.push(w);
+
+                const readyPromise = new Promise((resolve) => {
+                    const handler = (e) => {
+                        if (e.data.type === 'ready') {
+                            w.removeEventListener('message', handler);
+                            resolve();
+                        }
+                    };
+                    w.addEventListener('message', handler);
+                    w.postMessage({
+                        type: 'init',
+                        data: {
+                            model: modelSelect.value,
+                            device: currentDevice
+                        }
+                    });
+                });
+                workerReadyPromises.push(readyPromise);
+            }
+
+            showStatus('Carregando modelos...');
+            await Promise.all(workerReadyPromises);
+            showStatus('Modelos prontos!');
+
+            const audioContext = new AudioContext();
+
+            async function prepareAudio(file) {
+                const arrayBuffer = await file.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+                const channelData = audioBuffer.getChannelData(0);
+                
+                const offlineCtx = new OfflineAudioContext(1, channelData.length, 16000);
+                const offlineSource = offlineCtx.createBufferSource();
+                const tempBuffer = offlineCtx.createBuffer(1, channelData.length, audioBuffer.sampleRate);
+                tempBuffer.copyToChannel(channelData, 0);
+                offlineSource.buffer = tempBuffer;
+                offlineSource.connect(offlineCtx.destination);
+                offlineSource.start();
+                
+                const renderedBuffer = await offlineCtx.startRendering();
+                return Float32Array.from(renderedBuffer.getChannelData(0));
+            }
+
+            async function sendToWorker(worker, file, audioData) {
+                return new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        resolve();
+                    }, 300000);
+
+                    const handler = (e) => {
+                        if (e.data.filename === file.name) {
+                            worker.removeEventListener('message', handler);
+                            clearTimeout(timeout);
+                            resolve();
+                        }
+                    };
+                    worker.addEventListener('message', handler);
+
+                    worker.postMessage({
+                        type: 'transcribe',
+                        data: {
+                            filename: file.name,
+                            audio: audioData
+                        }
+                    }, [audioData.buffer]);
+                });
+            }
+
+            const totalFiles = selectedFiles.length;
+            let completedFiles = 0;
+            let nextFileIndex = 0;
+
+            async function processNextFile() {
+                while (nextFileIndex < totalFiles) {
+                    const workerIndex = nextFileIndex % numWorkers;
+                    const worker = workers[workerIndex];
+                    const file = selectedFiles[nextFileIndex];
+                    nextFileIndex++;
+                    
+                    showStatus(`Processando ${completedFiles + 1}/${totalFiles}: ${file.name}`);
+                    progressLabel.textContent = `Arquivo ${completedFiles + 1}/${totalFiles}`;
+                    updateFileStatus(file.name, 'processing');
+                    timings[file.name] = Date.now();
 
                     try {
-                        const arrayBuffer = await file.arrayBuffer();
-                        const result = await transcriber(arrayBuffer);
-                        results[file.name] = result.text;
+                        const audioData = await prepareAudio(file);
+                        await sendToWorker(worker, file, audioData);
+                        completedFiles++;
+                        updateProgress(completedFiles / totalFiles);
                     } catch (error) {
-                        results[file.name] = `Erro: ${error.message}`;
+                        results[file.name] = { text: `Erro: ${error.message}`, chunks: null, timing: 0 };
+                        updateFileStatus(file.name, 'error');
                     }
-
-                    updateProgress((i + 1) / selectedFiles.length);
                 }
-
-                renderResults();
-                showStatus('Concluído.');
-                downloadAllBtn.disabled = false;
-            } catch (error) {
-                console.error('Erro:', error);
-                showStatus(`Erro: ${error.message}`);
-            } finally {
-                transcribeBtn.disabled = false;
-                progressContainer.classList.remove('active');
             }
+
+            const parallelJobs = [];
+            for (let i = 0; i < numWorkers; i++) {
+                parallelJobs.push(processNextFile());
+            }
+
+            await Promise.all(parallelJobs);
+
+            workers.forEach(w => w.terminate());
+            await audioContext.close();
+            renderResults();
+            showStatus('Concluído.');
+            downloadAllBtn.disabled = false;
+            transcribeBtn.disabled = false;
+            progressContainer.classList.remove('active');
+            isTranscribing = false;
         });
 
         function renderResults() {
             resultsList.innerHTML = '';
             let totalChars = 0;
+            let totalTime = 0;
 
-            Object.entries(results).forEach(([filename, text]) => {
-                const isError = text.startsWith('Erro:');
-                const charCount = isError ? 0 : text.length;
+            Object.entries(results).forEach(([filename, data]) => {
+                const isError = data.text.startsWith('Erro:');
+                const charCount = isError ? 0 : data.text.length;
                 totalChars += charCount;
+                totalTime += data.timing || 0;
 
                 const item = document.createElement('div');
                 item.className = 'result-item';
@@ -606,10 +944,13 @@
                             <button class="result-btn btn-secondary" onclick="copyToClipboard('${filename.replace(/'/g, "\\'")}')">Copiar</button>
                         </div>
                     </div>
-                    <div class="result-text">${text}</div>
+                    <div class="result-text">${escapeHtml(data.text)}</div>
                 `;
                 resultsList.appendChild(item);
             });
+
+            const avgTime = totalTime / Object.keys(results).length;
+            const totalDuration = selectedFiles.reduce((sum, f) => sum + (timings[f.name] ? 0 : 0), 0);
 
             statsDiv.innerHTML = `
                 <div class="stats-row">
@@ -620,17 +961,44 @@
                     <span class="stats-label">Caracteres:</span>
                     <span class="stats-value">${totalChars.toLocaleString()}</span>
                 </div>
+                <div class="perf-stats">
+                    <div class="perf-stat">
+                        <div class="perf-stat-value">${currentDevice.toUpperCase()}</div>
+                        <div class="perf-stat-label">Backend</div>
+                    </div>
+                    <div class="perf-stat">
+                        <div class="perf-stat-value">${avgTime > 0 ? (avgTime / 1000).toFixed(1) + 's' : '-'}</div>
+                        <div class="perf-stat-label">Tempo médio</div>
+                    </div>
+                    <div class="perf-stat">
+                        <div class="perf-stat-value">${Object.keys(results).length}</div>
+                        <div class="perf-stat-label">Processados</div>
+                    </div>
+                </div>
             `;
 
             resultsContainer.classList.add('active');
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function checkComplete() {
+            const doneCount = Object.keys(results).length;
+            if (doneCount === selectedFiles.length) {
+                renderResults();
+            }
+        }
+
         window.downloadFile = (filename) => {
-            const text = results[filename];
-            if (!text) return;
+            const data = results[filename];
+            if (!data) return;
 
             const element = document.createElement('a');
-            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(data.text));
             element.setAttribute('download', `${filename.replace(/\.[^/.]+$/, '')}.txt`);
             element.style.display = 'none';
             document.body.appendChild(element);
@@ -639,10 +1007,10 @@
         };
 
         window.copyToClipboard = (filename) => {
-            const text = results[filename];
-            if (!text) return;
+            const data = results[filename];
+            if (!data) return;
 
-            navigator.clipboard.writeText(text).then(() => {
+            navigator.clipboard.writeText(data.text).then(() => {
                 alert('Copiado para a área de transferência!');
             });
         };
@@ -651,9 +1019,9 @@
             const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
             const zip = new JSZip();
 
-            Object.entries(results).forEach(([filename, text]) => {
+            Object.entries(results).forEach(([filename, data]) => {
                 const txtName = `${filename.replace(/\.[^/.]+$/, '')}.txt`;
-                zip.file(txtName, text);
+                zip.file(txtName, data.text);
             });
 
             const blob = await zip.generateAsync({ type: 'blob' });
@@ -670,7 +1038,7 @@
         clearBtn.addEventListener('click', () => {
             selectedFiles = [];
             results = {};
-            transcriber = null;
+            timings = {};
             fileInput.value = '';
             filesList.classList.remove('active');
             resultsContainer.classList.remove('active');
@@ -680,16 +1048,28 @@
             progressContainer.classList.remove('active');
         });
 
-        function updateModelProgress(progress) {
+        function updateProgress(progress) {
             const percent = Math.round(progress * 100);
             progressFill.style.width = percent + '%';
             progressPercent.textContent = percent + '%';
         }
 
-        function updateProgress(progress) {
-            const percent = Math.round(progress * 100);
-            progressFill.style.width = percent + '%';
-            progressPercent.textContent = percent + '%';
+        function renderDownloads(downloads) {
+            const entries = Object.entries(downloads);
+            if (entries.length === 0) {
+                downloadsList.innerHTML = '';
+                return;
+            }
+            downloadsList.innerHTML = entries.map(([file, data]) => {
+                const name = file.split('/').pop();
+                const loaded = (data.loaded / 1024 / 1024).toFixed(1);
+                const total = (data.total / 1024 / 1024).toFixed(1);
+                const pct = data.total > 0 ? Math.round(data.loaded / data.total * 100) : 0;
+                return `<div class="download-item">
+                    <span class="download-name" title="${file}">${name}</span>
+                    <span class="download-size">${loaded} / ${total} MB (${pct}%)</span>
+                </div>`;
+            }).join('');
         }
 
         function showStatus(message) {
@@ -701,6 +1081,10 @@
             status.classList.remove('active');
             status.textContent = '';
         }
+
+        detectDevice();
+        initWorker();
+        loadModel();
     </script>
 </body>
 </html>
