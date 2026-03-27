@@ -1,6 +1,64 @@
 let transcriber = null;
 const downloads = {};
 
+function normalizeForComparison(text) {
+    return text
+        .toLowerCase()
+        .replace(/[\s\u00A0]+/g, ' ')
+        .replace(/[.,!?;:]+$/g, '')
+        .trim();
+}
+
+function collapseRepeatedSentences(text, maxRepeat = 2) {
+    const parts = text
+        .split(/(?<=[.!?])\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    if (parts.length <= 1) return text;
+
+    const output = [];
+    let previousNorm = '';
+    let repeatCount = 0;
+
+    for (const sentence of parts) {
+        const normalized = normalizeForComparison(sentence);
+        const wordCount = normalized ? normalized.split(/\s+/).length : 0;
+
+        if (normalized && normalized === previousNorm && wordCount >= 3) {
+            repeatCount += 1;
+            if (repeatCount <= maxRepeat) {
+                output.push(sentence);
+            }
+            continue;
+        }
+
+        previousNorm = normalized;
+        repeatCount = 1;
+        output.push(sentence);
+    }
+
+    return output.join(' ').trim();
+}
+
+function collapseRepeatedWords(text) {
+    // Cap long runs like "eu eu eu eu" to 3 and "é, é, é, é" to 4.
+    const repeatedWordPattern = /\b([\p{L}][\p{L}'-]{0,29})\b(?:\s+\1\b){3,}/giu;
+    const repeatedCommaWordPattern = /\b([\p{L}][\p{L}'-]{0,29})\b(?:,\s*\1\b){4,}/giu;
+
+    let cleaned = text.replace(repeatedWordPattern, '$1 $1 $1');
+    cleaned = cleaned.replace(repeatedCommaWordPattern, '$1, $1, $1, $1');
+    return cleaned;
+}
+
+function cleanTranscriptionText(rawText) {
+    let text = (rawText || '').replace(/\[.*?\]/g, ' ').trim();
+    text = text.replace(/[\s\u00A0]+/g, ' ').trim();
+    text = collapseRepeatedSentences(text, 2);
+    text = collapseRepeatedWords(text);
+    return text.replace(/[\s\u00A0]+/g, ' ').trim();
+}
+
 self.onmessage = async function(e) {
     const { type, data } = e.data;
 
@@ -18,7 +76,7 @@ self.onmessage = async function(e) {
                     try {
                         ({ pipeline, env } = await import(url));
                         break;
-                    } catch (e) {
+                    } catch {
                         self.postMessage({ type: 'status', message: `Falha CDN ${url.split('/')[2]}, tentando próximo...` });
                     }
                 }
@@ -114,9 +172,7 @@ self.onmessage = async function(e) {
                 const result = await transcriber(audioData, transcribeOptions);
                 clearInterval(ticker);
 
-                let text = result.text || '';
-                text = text.replace(/\[.*?\]/g, '').trim();
-                text = text.replace(/\s+/g, ' ').trim();
+                const text = cleanTranscriptionText(result.text);
 
                 self.postMessage({
                     type: 'result',
