@@ -7,7 +7,7 @@ export const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|m4a|webm|wma|aac|opus)$/i;
 export async function prepareAudio(file, audioContext) {
     showStatus(`Decodificando áudio: ${file.name}...`);
     const arrayBuffer = await file.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     const channelData = audioBuffer.getChannelData(0);
     const duration = audioBuffer.duration;
 

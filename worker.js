@@ -41,12 +41,49 @@ function collapseRepeatedSentences(text, maxRepeat = 2) {
     return output.join(' ').trim();
 }
 
-function collapseRepeatedWords(text) {
-    // Cap long runs like "eu eu eu eu" to 3 and "é, é, é, é" to 4.
-    const repeatedWordPattern = /\b([\p{L}][\p{L}'-]{0,29})\b(?:\s+\1\b){3,}/giu;
-    const repeatedCommaWordPattern = /\b([\p{L}][\p{L}'-]{0,29})\b(?:,\s*\1\b){4,}/giu;
+function collapseRepeatedNgrams(text, maxN = 6, maxRepeats = 2) {
+    let result = text;
+    for (let n = maxN; n >= 1; n--) {
+        const words = result.split(/\s+/);
+        const output = [];
+        let i = 0;
 
-    let cleaned = text.replace(repeatedWordPattern, '$1 $1 $1');
+        while (i < words.length) {
+            let foundRepeat = false;
+            if (i + n <= words.length) {
+                const ngram = words.slice(i, i + n).join(' ').toLowerCase();
+                let repeatCount = 1;
+                let j = i + n;
+                while (j + n <= words.length) {
+                    const next = words.slice(j, j + n).join(' ').toLowerCase();
+                    if (next === ngram) {
+                        repeatCount++;
+                        j += n;
+                    } else {
+                        break;
+                    }
+                }
+                if (repeatCount > maxRepeats) {
+                    for (let r = 0; r < maxRepeats; r++) {
+                        output.push(...words.slice(i, i + n));
+                    }
+                    i = j;
+                    foundRepeat = true;
+                }
+            }
+            if (!foundRepeat) {
+                output.push(words[i]);
+                i++;
+            }
+        }
+        result = output.join(' ');
+    }
+    return result;
+}
+
+function collapseRepeatedWords(text) {
+    let cleaned = collapseRepeatedNgrams(text, 6, 2);
+    const repeatedCommaWordPattern = /\b([\p{L}][\p{L}'-]{0,29})\b(?:,\s*\1\b){4,}/giu;
     cleaned = cleaned.replace(repeatedCommaWordPattern, '$1, $1, $1, $1');
     return cleaned;
 }
@@ -79,6 +116,10 @@ self.onmessage = async function(e) {
                     } catch {
                         self.postMessage({ type: 'status', message: `Falha CDN ${url.split('/')[2]}, tentando próximo...` });
                     }
+                }
+
+                if (!pipeline || !env) {
+                    throw new Error('Falha ao carregar transformers de todos os CDNs');
                 }
 
                 env.allowLocalModels = false;
@@ -136,7 +177,10 @@ self.onmessage = async function(e) {
             }
 
             try {
-                self.postMessage({ type: 'status', message: `Processando: ${data.filename}` });
+                const segId = data.segmentIndex !== undefined
+                    ? `[seg ${data.segmentIndex + 1}/${data.totalSegments}] `
+                    : '';
+                self.postMessage({ type: 'status', message: `Processando: ${segId}${data.filename}` });
 
                 const audioData = data.audio;
                 const totalSeconds = audioData.length / 16000;
@@ -144,6 +188,8 @@ self.onmessage = async function(e) {
                 self.postMessage({
                     type: 'transcribe_info',
                     filename: data.filename,
+                    segmentIndex: data.segmentIndex,
+                    totalSegments: data.totalSegments,
                     totalSeconds
                 });
 
@@ -155,6 +201,7 @@ self.onmessage = async function(e) {
                     self.postMessage({
                         type: 'transcribe_elapsed',
                         filename: data.filename,
+                        segmentIndex: data.segmentIndex,
                         elapsed: `${min}:${String(sec).padStart(2, '0')}`
                     });
                 }, 3000);
@@ -164,6 +211,9 @@ self.onmessage = async function(e) {
                     stride_length_s: 5,
                     return_timestamps: true,
                     task: 'transcribe',
+                    no_repeat_ngram_size: 3,
+                    repetition_penalty: 1.2,
+                    condition_on_previous_text: false,
                 };
                 if (data.language && data.language !== 'auto') {
                     transcribeOptions.language = data.language;
@@ -175,15 +225,22 @@ self.onmessage = async function(e) {
                 const text = cleanTranscriptionText(result.text);
 
                 self.postMessage({
-                    type: 'result',
+                    type: 'segment_result',
                     filename: data.filename,
+                    segmentIndex: data.segmentIndex,
+                    totalSegments: data.totalSegments,
                     text,
-                    chunks: result.chunks
+                    chunks: result.chunks,
+                    overlapStartSec: data.overlapStartSec || 0,
+                    overlapEndSec: data.overlapEndSec || 0,
+                    segmentDurationSec: totalSeconds,
                 });
             } catch (error) {
                 self.postMessage({
-                    type: 'error',
+                    type: 'segment_error',
                     filename: data.filename,
+                    segmentIndex: data.segmentIndex,
+                    totalSegments: data.totalSegments,
                     error: error.message
                 });
             }

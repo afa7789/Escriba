@@ -58,7 +58,7 @@ describe('files module', () => {
         const files = [
             new File(['audio-data'], 'test.mp3', { type: 'audio/mpeg' }),
         ];
-        handleFiles(files);
+        await handleFiles(files);
         expect(state.selectedFiles.length).to.equal(1);
         expect(state.selectedFiles[0].name).to.equal('test.mp3');
     });
@@ -68,22 +68,22 @@ describe('files module', () => {
         const files = [
             new File(['audio-data'], 'test.m4a', { type: '' }),
         ];
-        handleFiles(files);
+        await handleFiles(files);
         expect(state.selectedFiles.length).to.equal(1);
     });
 
     it('should deduplicate files by name + size', async () => {
         const { handleFiles } = await import('../src/files.js');
         const file = new File(['audio-data'], 'test.mp3', { type: 'audio/mpeg' });
-        handleFiles([file]);
-        handleFiles([file]);
+        await handleFiles([file]);
+        await handleFiles([file]);
         expect(state.selectedFiles.length).to.equal(1);
     });
 
     it('should accumulate files across calls', async () => {
         const { handleFiles } = await import('../src/files.js');
-        handleFiles([new File(['a'], 'a.mp3', { type: 'audio/mpeg' })]);
-        handleFiles([new File(['b'], 'b.mp3', { type: 'audio/mpeg' })]);
+        await handleFiles([new File(['a'], 'a.mp3', { type: 'audio/mpeg' })]);
+        await handleFiles([new File(['b'], 'b.mp3', { type: 'audio/mpeg' })]);
         expect(state.selectedFiles.length).to.equal(2);
     });
 });
