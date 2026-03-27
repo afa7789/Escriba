@@ -36,7 +36,8 @@ function handleWorkerMessage(e) {
             const estimatedTotalSec = Math.max(audioSec * 0.1, audioSec * 0.03);
             const progress = Math.min(elapsedSec / estimatedTotalSec, 0.95);
             updateProgress(progress);
-            showStatus(`Transcrevendo: ${filename} — ${e.data.elapsed} (~${Math.round(progress * 100)}%)`);
+            updateFileStatus(filename, 'processing', progress);
+            showStatus(`Transcrevendo: ${filename} — ${e.data.elapsed}`);
             break;
         }
         case 'result':

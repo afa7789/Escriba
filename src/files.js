@@ -87,14 +87,22 @@ export function renderFilesList() {
     el.filesList.classList.add('active');
 }
 
-export function updateFileStatus(filename, statusValue) {
+export function updateFileStatus(filename, statusValue, progress = null) {
     const safeName = filename.replace(/[^a-zA-Z0-9]/g, '_');
     const statusEl = document.getElementById(`status-${safeName}`);
     const progressEl = document.getElementById(`progress-${safeName}`);
     if (statusEl) {
-        statusEl.textContent = statusValue === 'done' ? '✓' : statusValue === 'error' ? '✗' : '...';
+        if (typeof progress === 'number') {
+            statusEl.textContent = `${Math.round(progress * 100)}%`;
+        } else {
+            statusEl.textContent = statusValue === 'done' ? '✓' : statusValue === 'error' ? '✗' : '...';
+        }
     }
     if (progressEl) {
-        progressEl.style.width = statusValue === 'done' ? '100%' : statusValue === 'processing' ? '5%' : '0%';
+        if (typeof progress === 'number') {
+            progressEl.style.width = `${Math.round(progress * 100)}%`;
+        } else {
+            progressEl.style.width = statusValue === 'done' ? '100%' : statusValue === 'processing' ? '5%' : '0%';
+        }
     }
 }
