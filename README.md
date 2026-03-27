@@ -22,7 +22,7 @@ A local browser-based audio transcription tool that runs entirely in your browse
 
 ## Live Demo
 
-Visit: [https://afa7789.github.io/Escriba/](https://afa7789.github.io/Escriba/)
+Visit: [https://afa7789.github.io/Escriba/](https://afa7789.github.io/escriba/)
 
 ## Tech Stack
 
