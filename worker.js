@@ -1,5 +1,5 @@
 let transcriber = null;
-let downloads = {};
+const downloads = {};
 
 self.onmessage = async function(e) {
     const { type, data } = e.data;

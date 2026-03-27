@@ -1,0 +1,36 @@
+export default [
+    {
+        files: ['src/**/*.js', 'worker.js', 'tests/**/*.js'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                window: 'readonly',
+                document: 'readonly',
+                navigator: 'readonly',
+                console: 'readonly',
+                setTimeout: 'readonly',
+                clearTimeout: 'readonly',
+                setInterval: 'readonly',
+                clearInterval: 'readonly',
+                URL: 'readonly',
+                Blob: 'readonly',
+                File: 'readonly',
+                Float32Array: 'readonly',
+                AudioContext: 'readonly',
+                OfflineAudioContext: 'readonly',
+                MediaRecorder: 'readonly',
+                Worker: 'readonly',
+                self: 'readonly',
+            },
+        },
+        rules: {
+            'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+            'no-undef': 'error',
+            'no-var': 'error',
+            'prefer-const': 'warn',
+            'eqeqeq': ['error', 'always'],
+            'no-implicit-globals': 'error',
+        },
+    },
+];
