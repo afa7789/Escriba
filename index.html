@@ -1178,7 +1178,9 @@
                 showStatus('ZIP baixado com sucesso!');
             } catch (err) {
                 console.error('Erro ao gerar ZIP:', err);
-                showStatus('Erro ao baixar ZIP: ' + err.message);
+                const errorMsg = 'Erro ao baixar ZIP: ' + err.message;
+                showStatus(errorMsg);
+                alert(errorMsg);
             }
         });
 
