@@ -2,7 +2,7 @@ import { state, el } from './state.js';
 import { clearStatus, showStatus } from './dom.js';
 import { AUDIO_EXTENSIONS } from './audio.js';
 
-export function handleFiles(files) {
+export async function handleFiles(files) {
     const audioFiles = Array.from(files).filter(f =>
         f.type.startsWith('audio/') || AUDIO_EXTENSIONS.test(f.name)
     );
@@ -16,12 +16,30 @@ export function handleFiles(files) {
         const isDuplicate = state.selectedFiles.some(
             existing => existing.name === file.name && existing.size === file.size
         );
-        if (!isDuplicate) state.selectedFiles.push(file);
+        if (!isDuplicate) {
+            file.duration = await getAudioDuration(file);
+            state.selectedFiles.push(file);
+        }
     }
 
     renderFilesList();
     el.transcribeBtn.disabled = !state.isReady;
     clearStatus();
+}
+
+async function getAudioDuration(file) {
+    return new Promise((resolve) => {
+        const audio = new Audio();
+        audio.src = URL.createObjectURL(file);
+        audio.addEventListener('loadedmetadata', () => {
+            URL.revokeObjectURL(audio.src);
+            resolve(audio.duration);
+        });
+        audio.addEventListener('error', () => {
+            URL.revokeObjectURL(audio.src);
+            resolve(0);
+        });
+    });
 }
 
 export function renderFilesList() {
@@ -39,7 +57,10 @@ export function renderFilesList() {
         nameDiv.textContent = file.name;
         const sizeDiv = document.createElement('div');
         sizeDiv.className = 'file-item-size';
-        sizeDiv.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        const mins = Math.floor((file.duration || 0) / 60);
+        const secs = Math.round((file.duration || 0) % 60);
+        const durationStr = file.duration > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : '';
+        sizeDiv.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB ${durationStr}`;
         info.appendChild(nameDiv);
         info.appendChild(sizeDiv);
 

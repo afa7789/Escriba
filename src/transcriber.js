@@ -27,11 +27,18 @@ function handleWorkerMessage(e) {
             el.transcribeBtn.disabled = state.selectedFiles.length === 0;
             break;
         case 'transcribe_info':
+            state.currentAudioSeconds = e.data.totalSeconds;
             showStatus(`Transcrevendo: ${filename} (~${Math.ceil(e.data.totalSeconds / 60)} min de áudio)`);
             break;
-        case 'transcribe_elapsed':
-            showStatus(`Transcrevendo: ${filename} — ${e.data.elapsed} decorridos`);
+        case 'transcribe_elapsed': {
+            const elapsedSec = (Date.now() - (state.timings[e.data.filename] || Date.now())) / 1000;
+            const audioSec = state.currentAudioSeconds || 1;
+            const estimatedTotalSec = Math.max(audioSec * 0.1, audioSec * 0.03);
+            const progress = Math.min(elapsedSec / estimatedTotalSec, 0.95);
+            updateProgress(progress);
+            showStatus(`Transcrevendo: ${filename} — ${e.data.elapsed} (~${Math.round(progress * 100)}%)`);
             break;
+        }
         case 'result':
             state.results[filename] = { text, chunks, timing: Date.now() - (state.timings[filename] || Date.now()) };
             updateFileStatus(filename, 'done');

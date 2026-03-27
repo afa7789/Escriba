@@ -9,7 +9,19 @@ self.onmessage = async function(e) {
             try {
                 self.postMessage({ type: 'status', message: 'Importando transformers...' });
 
-                const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1');
+                let pipeline, env;
+                const cdns = [
+                    'https://esm.sh/@huggingface/transformers@3.8.1',
+                    'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js'
+                ];
+                for (const url of cdns) {
+                    try {
+                        ({ pipeline, env } = await import(url));
+                        break;
+                    } catch (e) {
+                        self.postMessage({ type: 'status', message: `Falha CDN ${url.split('/')[2]}, tentando próximo...` });
+                    }
+                }
 
                 env.allowLocalModels = false;
                 env.useBrowserCache = true;

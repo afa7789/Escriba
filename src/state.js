@@ -12,6 +12,7 @@ export const state = {
     recordingStartTime: null,
     recordingTimer: null,
     webgpuSupported: false,
+    currentAudioSeconds: 0,
 };
 
 export const el = {};
