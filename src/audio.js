@@ -2,7 +2,7 @@ import { state, el } from './state.js';
 import { showStatus } from './dom.js';
 import { handleFiles } from './files.js';
 
-export const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|m4a|mp4|webm|wma|aac|opus)$/i;
+export const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|m4a|webm|wma|aac|opus)$/i;
 
 export async function prepareAudio(file, audioContext) {
     showStatus(`Decodificando áudio: ${file.name}...`);
